@@ -1,0 +1,6 @@
+config SECURITY_CHECMATE
+	bool "Checmate support"
+	depends on SECURITY && SOCK_CGROUP_DATA
+	default n
+	help
+	  This turns on checmate

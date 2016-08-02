@@ -197,4 +197,7 @@ struct prctl_mm_map {
 # define PR_CAP_AMBIENT_LOWER		3
 # define PR_CAP_AMBIENT_CLEAR_ALL	4
 
+/* (CHEC)MATE operations */
+#define PR_CHECMATE 0x43484543
+
 #endif /* _LINUX_PRCTL_H */
