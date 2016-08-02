@@ -741,7 +741,7 @@ static int bpf_prog_load(union bpf_attr *attr)
 	if (attr->insn_cnt >= BPF_MAXINSNS)
 		return -EINVAL;
 
-	if (type == BPF_PROG_TYPE_KPROBE &&
+	if ((type == BPF_PROG_TYPE_KPROBE || type == BPF_PROG_TYPE_CHECMATE) &&
 	    attr->kern_version != LINUX_VERSION_CODE)
 		return -EINVAL;
 

@@ -1,0 +1,11 @@
+config SECURITY_CHECMATE
+	bool "Checmate support"
+	depends on SECURITY && SOCK_CGROUP_DATA
+	default n
+	help
+	  This selects Checmate, which is an LSM that works in conjuncion with
+	  cgroups and BPF in order to provide programmable, flexible, and
+	  extensible security policies. Further information can be found in
+	  Documentation/security/Checmate.txt
+
+	  If you are unsure how to answer this question, answer N.
