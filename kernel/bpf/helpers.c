@@ -16,6 +16,7 @@
 #include <linux/ktime.h>
 #include <linux/sched.h>
 #include <linux/uidgid.h>
+#include <linux/uaccess.h>
 
 /* If kernel subsystem is allowing eBPF programs to call this function,
  * inside its own verifier_ops->get_func_proto() callback it should return
@@ -185,4 +186,37 @@ const struct bpf_func_proto bpf_get_current_comm_proto = {
 	.ret_type	= RET_INTEGER,
 	.arg1_type	= ARG_PTR_TO_RAW_STACK,
 	.arg2_type	= ARG_CONST_STACK_SIZE,
+};
+
+static u64 bpf_get_current_task(u64 r1, u64 r2, u64 r3, u64 r4, u64 r5)
+{
+	return (long) current;
+}
+
+const struct bpf_func_proto bpf_get_current_task_proto = {
+	.func           = bpf_get_current_task,
+	.gpl_only       = true,
+	.ret_type       = RET_INTEGER,
+};
+
+static u64 bpf_probe_read(u64 r1, u64 r2, u64 r3, u64 r4, u64 r5)
+{
+	void *dst = (void *) (long) r1;
+	int ret, size = (int) r2;
+	void *unsafe_ptr = (void *) (long) r3;
+
+	ret = probe_kernel_read(dst, unsafe_ptr, size);
+	if (unlikely(ret < 0))
+		memset(dst, 0, size);
+
+	return ret;
+}
+
+const struct bpf_func_proto bpf_probe_read_proto = {
+	.func		= bpf_probe_read,
+	.gpl_only	= true,
+	.ret_type	= RET_INTEGER,
+	.arg1_type	= ARG_PTR_TO_RAW_STACK,
+	.arg2_type	= ARG_CONST_STACK_SIZE,
+	.arg3_type	= ARG_ANYTHING,
 };
