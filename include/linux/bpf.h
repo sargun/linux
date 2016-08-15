@@ -316,6 +316,7 @@ extern const struct bpf_func_proto bpf_skb_vlan_pop_proto;
 extern const struct bpf_func_proto bpf_get_stackid_proto;
 extern const struct bpf_func_proto bpf_get_current_task_proto;
 extern const struct bpf_func_proto bpf_probe_read_proto;
+extern const struct bpf_func_proto bpf_current_task_under_cgroup_proto;
 
 /* Shared helpers among cBPF and eBPF. */
 void bpf_user_rnd_init_once(void);
