@@ -91,6 +91,8 @@ static const struct bpf_func_proto *checmate_prog_func_proto(enum bpf_func_id fu
 		return &bpf_get_current_comm_proto;
 	case BPF_FUNC_trace_printk:
 		return bpf_get_trace_printk_proto();
+	case BPF_FUNC_current_task_under_cgroup:
+		return &bpf_current_task_under_cgroup_proto;
 	default:
 		return NULL;
 	}
