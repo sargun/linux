@@ -398,6 +398,17 @@ enum bpf_func_id {
 	 */
 	BPF_FUNC_skb_change_tail,
 
+	/**
+	 * bpf_probe_write_checmate(ctx, void *dst, void *src, int len)
+	 * safely attempt to write to memory pointed to by a checmate context
+	 * @ctx: struct checmate_ctx*
+	 * @dst: destination address in userspace
+	 * @src: source address on stack
+	 * @len: number of bytes to copy
+	 * Return: 0 on success or negative error
+	 */
+	BPF_FUNC_probe_write_checmate,
+
 	__BPF_FUNC_MAX_ID,
 };
 
