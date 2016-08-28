@@ -55,6 +55,8 @@ static int (*bpf_skb_get_tunnel_opt)(void *ctx, void *md, int size) =
 	(void *) BPF_FUNC_skb_get_tunnel_opt;
 static int (*bpf_skb_set_tunnel_opt)(void *ctx, void *md, int size) =
 	(void *) BPF_FUNC_skb_set_tunnel_opt;
+static int (*bpf_probe_write_checmate)(void *ctx, void *dst, void *src, int len) =
+	(void *) BPF_FUNC_probe_write_checmate;
 
 /* llvm builtin functions that eBPF C program may use to
  * emit BPF_LD_ABS and BPF_LD_IND instructions
