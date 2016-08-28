@@ -50,7 +50,7 @@ test_cgrp2_array_pin-objs := libbpf.o test_cgrp2_array_pin.o
 xdp1-objs := bpf_load.o libbpf.o xdp1_user.o
 # reuse xdp1 source intentionally
 xdp2-objs := bpf_load.o libbpf.o xdp1_user.o
-test_current_task_under_cgroup-objs := bpf_load.o libbpf.o \
+test_current_task_under_cgroup-objs := bpf_load.o libbpf.o cgroup_helpers.o \
 				       test_current_task_under_cgroup_user.o
 
 # Tell kbuild to always build the programs
