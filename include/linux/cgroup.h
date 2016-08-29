@@ -571,6 +571,22 @@ static inline void pr_cont_cgroup_path(struct cgroup *cgrp)
 	pr_cont_kernfs_path(cgrp->kn);
 }
 
+/**
+ * cgroup_parent - Get the parent of a specific cgroup
+ * @cgrp: target cgroup
+ *
+ * If the cgroup does not have a parent (top level), then this function
+ * returns NULL. Otherwise, it'll return a pointer to te the parent cgroup.
+ */
+static inline struct cgroup *cgroup_parent(struct cgroup *cgrp)
+{
+	struct cgroup_subsys_state *parent_css = cgrp->self.parent;
+
+	if (parent_css)
+		return container_of(parent_css, struct cgroup, self);
+	return NULL;
+}
+
 #else /* !CONFIG_CGROUPS */
 
 struct cgroup_subsys_state;
