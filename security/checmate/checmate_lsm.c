@@ -77,7 +77,7 @@ checmate_css_alloc(struct cgroup_subsys_state *parent)
 	return &checmate->css;
 }
 
-/*
+/**
  * checmate_hook_free - Deallocate, and release resources for a given hook
  * @hook: The hook
  *
@@ -96,7 +96,7 @@ static void checmate_hook_free(struct checmate_hook *hook)
 	}
 }
 
-/*
+/**
  * checmate_css_free - Callback for css_free
  * @css: The cgroup_subsys_state to be freed
  */
@@ -113,7 +113,7 @@ static void checmate_css_free(struct cgroup_subsys_state *css)
 	mutex_unlock(&checmate_mutex);
 }
 
-/*
+/**
  * checmate_instance_add - Add BPF program instance to a Checmate hook
  * @hook: The hook
  * @prog: A checmate BPF program
@@ -158,7 +158,7 @@ err:
 	return rc;
 }
 
-/*
+/**
  * checmate_instance_cleanup_rcu - Cleans up a Checmate program instance
  * @rp: rcu_head pointer to a Checmate instance
  */
@@ -171,7 +171,7 @@ static void checmate_instance_cleanup_rcu(struct rcu_head *rp)
 	kfree(instance);
 }
 
-/*
+/**
  * checmate_instance_remove - Remove Checmate program instance from a hook
  * @hook: The hook
  * @prog: A Checmate BPF program referred to by the instance.
@@ -200,7 +200,7 @@ static int checmate_instance_remove(struct checmate_hook *hook,
 	return rc;
 }
 
-/*
+/**
  * checmate_hook_reset - Remove all program instances from a Checmate hook
  * @hook: The hook
  *
@@ -219,7 +219,7 @@ static void checmate_hook_reset(struct checmate_hook *hook)
 	hook->count = 0;
 }
 
-/*
+/**
  * checmate_write_s64 - Handle a write to the checmate cgroup control file
  * @css: The given cgroup state that own's the hook
  * @cft: The given cftype that is being referenced, used to get the hook id.
@@ -261,7 +261,7 @@ out:
 	return rc;
 }
 
-/*
+/**
  * checmate_read_u64 - Read the number of programs loaded into a given hook
  * @css: The given cgroup state that own's the hook
  * @cft: The given cftype that is being referenced, used to get the hook id.
@@ -306,7 +306,7 @@ struct cgroup_subsys checmate_cgrp_subsys = {
 	.dfl_cftypes	= checmate_files,
 };
 
-/*
+/**
  * check_checmate_filters - Run all the BPF programs associated with a hook
  * @css: A pointer to the Checmate css
  * @ctx: A pointer to the Checmate ctx
@@ -334,7 +334,7 @@ static int checmate_check_filters(struct checmate_css *checmate,
 	return rc;
 }
 
-/*
+/**
  * call_bpf_int_hook - Walk the cgroup hierarchy, running filters up the chain
  * @hook: The Hook ID
  * @css: A pointer to the Checmate css
@@ -369,7 +369,7 @@ out:
 	return rc;
 }
 
-/*
+/**
  * call_bpf_void_hook - Run all the BPF programs associated with a hook
  * Wrapper around call_bpf_int_hook.
  */
@@ -379,7 +379,7 @@ static void call_bpf_void_hook(int hook, struct cgroup_subsys_state *css,
 	call_bpf_int_hook(hook, css, ctx);
 }
 
-/*
+/**
  * css_from_sk - Get the Checmate CSS for an sk
  * @sk: The struct sock we're trying to get the CSS for.
  *
@@ -409,7 +409,7 @@ out:
 	return css;
 }
 
-/*
+/**
  * css_from_sock - Get the Checmate CSS for a socket
  * @sock: The struct socket we're trying to get the CSS for.
  *
@@ -427,7 +427,7 @@ static struct cgroup_subsys_state *css_from_sock(struct socket *sock)
 	return css_from_sk(sk);
 }
 
-/*
+/**
  * css_from_sock - Get the checmate CSS for the current task context.
  *
  * Return CSS success on success. ERR_PTR on failure. It checks to see if it's
