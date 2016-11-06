@@ -251,6 +251,17 @@ config	IP_VS_NQ
 	  If you want to compile it in kernel, say Y. To compile it as a
 	  module, choose M here. If unsure, say N.
 
+config	IP_VS_P2C
+        tristate "Power of two choices scheduling"
+	---help---
+	  The power of two choices scheduling algorithm directs network
+	  connections by choosing two servers at random, with the a non-zero
+	  weight, and directs traffic to the one with the least active
+	  connections.
+
+	  If you want to compile it in kernel, say Y. To compile it as a
+	  module, choose M here. If unsure, say N.
+
 comment 'IPVS SH scheduler'
 
 config IP_VS_SH_TAB_BITS
