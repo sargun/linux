@@ -2633,7 +2633,9 @@ struct dentry *nfs_fs_mount_common(struct nfs_server *server,
 			sb_mntdata.mntflags |= MS_SYNCHRONOUS;
 
 	/* Get a superblock - note that we may end up sharing one that already exists */
-	s = sget(nfs_mod->nfs_fs, compare_super, nfs_set_super, flags, &sb_mntdata);
+	BUG_ON(!mount_info->parsed->user_ns);
+	s = sget_userns(nfs_mod->nfs_fs, compare_super, nfs_set_super, flags,
+			mount_info->parsed->user_ns, &sb_mntdata);
 	if (IS_ERR(s)) {
 		mntroot = ERR_CAST(s);
 		goto out_err_nosb;
