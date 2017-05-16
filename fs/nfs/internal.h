@@ -121,6 +121,7 @@ struct nfs_parsed_mount_data {
 
 	struct security_mnt_opts lsm_opts;
 	struct net		*net;
+	struct user_namespace	*user_ns;
 };
 
 /* mount_clnt.c */

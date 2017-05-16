@@ -57,6 +57,9 @@
 
 #include <asm/uaccess.h>
 
+#include <linux/proc_ns.h>
+#include <linux/file.h>
+
 #include "nfs4_fs.h"
 #include "callback.h"
 #include "delegation.h"
@@ -102,6 +105,7 @@ enum {
 	Opt_mountport,
 	Opt_mountvers,
 	Opt_minorversion,
+	Opt_user_ns_fd,
 
 	/* Mount options that take string arguments */
 	Opt_nfsvers,
@@ -167,6 +171,7 @@ static const match_table_t nfs_mount_option_tokens = {
 	{ Opt_mountport, "mountport=%s" },
 	{ Opt_mountvers, "mountvers=%s" },
 	{ Opt_minorversion, "minorversion=%s" },
+	{ Opt_user_ns_fd, "user_ns_fd=%s" },
 
 	{ Opt_nfsvers, "nfsvers=%s" },
 	{ Opt_nfsvers, "vers=%s" },
@@ -944,6 +949,8 @@ static struct nfs_parsed_mount_data *nfs_alloc_parsed_mount_data(void)
 static void nfs_free_parsed_mount_data(struct nfs_parsed_mount_data *data)
 {
 	if (data) {
+		if (data->user_ns)
+			put_user_ns(data->user_ns);
 		kfree(data->client_address);
 		kfree(data->mount_server.hostname);
 		kfree(data->nfs_server.export_path);
@@ -1204,6 +1211,34 @@ static int nfs_get_option_ul_bound(substring_t args[], unsigned long *option,
 	return 0;
 }
 
+static int nfs_get_option_user_ns_fd(substring_t args[], struct user_namespace **user_ns)
+{
+	struct ns_common *ns;
+	struct file *file;
+	unsigned long fd;
+	int rc;
+
+	rc = nfs_get_option_ul_bound(args, &fd, 0, INT_MAX);
+	if (rc != 0)
+		return rc;
+
+	file = proc_ns_fget(fd);
+	if (IS_ERR(file))
+		return PTR_ERR(file);
+
+	rc = -EINVAL;
+	ns = get_proc_ns(file_inode(file));
+	if (ns->ops->type != CLONE_NEWUSER)
+		goto out;
+
+	*user_ns = container_of(ns, struct user_namespace, ns);
+
+	return 0;
+out:
+	fput(file);
+	return rc;
+}
+
 /*
  * Error-check and convert a string of mount options from user space into
  * a data structure.  The whole mount string is processed; bad options are
@@ -1427,7 +1462,11 @@ static int nfs_parse_mount_options(char *raw,
 				goto out_invalid_value;
 			mnt->minorversion = option;
 			break;
-
+		case Opt_user_ns_fd:
+			rc = nfs_get_option_user_ns_fd(args, &mnt->user_ns);
+			if (rc)
+				goto out_invalid_value_with_err;
+			break;
 		/*
 		 * options that take text values
 		 */
@@ -1671,6 +1710,9 @@ out_invalid_address:
 	return 0;
 out_invalid_value:
 	printk(KERN_INFO "NFS: bad mount option value specified: %s\n", p);
+	return 0;
+out_invalid_value_with_err:
+	printk(KERN_INFO "NFS: bad mount option value specified: %s err: %d\n", p, rc);
 	return 0;
 out_minorversion_mismatch:
 	printk(KERN_INFO "NFS: mount option vers=%u does not support "
@@ -2641,6 +2683,28 @@ error_splat_super:
 }
 EXPORT_SYMBOL_GPL(nfs_fs_mount_common);
 
+static int validate_user_ns(struct nfs_parsed_mount_data *args, int flags)
+{
+	if (!args->user_ns)
+		args->user_ns = get_user_ns(current_user_ns());
+
+	if ((flags & MS_SUBMOUNT) && args->user_ns != &init_user_ns) {
+		printk(KERN_INFO "NFS: Resetting mount to root user namespace "
+		      "because submounts are not supported");
+		put_user_ns(args->user_ns);
+		args->user_ns = get_user_ns(&init_user_ns);
+	}
+
+	if (!(flags & (MS_KERNMOUNT|MS_SUBMOUNT)) && !capable(CAP_SYS_ADMIN))
+		goto out_not_capable;
+
+	return 0;
+
+out_not_capable:
+	dfprintk(MOUNT, "NFS: User does not have global CAP_SYS_ADMIN\n");
+	return -EPERM;
+}
+
 struct dentry *nfs_fs_mount(struct file_system_type *fs_type,
 	int flags, const char *dev_name, void *raw_data)
 {
@@ -2661,6 +2725,10 @@ struct dentry *nfs_fs_mount(struct file_system_type *fs_type,
 	error = nfs_validate_mount_data(fs_type, raw_data, mount_info.parsed, mount_info.mntfh, dev_name);
 	if (error == NFS_TEXT_DATA)
 		error = nfs_validate_text_mount_data(raw_data, mount_info.parsed, dev_name);
+
+	if (!error)
+		error = validate_user_ns(mount_info.parsed, flags);
+
 	if (error < 0) {
 		mntroot = ERR_PTR(error);
 		goto out;
