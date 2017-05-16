@@ -2698,6 +2698,9 @@ static int validate_user_ns(struct nfs_parsed_mount_data *args, int flags)
 	if (!(flags & (MS_KERNMOUNT|MS_SUBMOUNT)) && !capable(CAP_SYS_ADMIN))
 		goto out_not_capable;
 
+	if (args->user_ns != &init_user_ns)
+		args->flags |= NFS_MOUNT_UNSHARED;
+
 	return 0;
 
 out_not_capable:
