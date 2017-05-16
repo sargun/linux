@@ -370,6 +370,7 @@ ff_layout_alloc_lseg(struct pnfs_layout_hdr *lh,
 		     struct nfs4_layoutget_res *lgr,
 		     gfp_t gfp_flags)
 {
+	struct user_namespace *user_ns = lh->plh_inode->i_sb->s_user_ns;
 	struct pnfs_layout_segment *ret;
 	struct nfs4_ff_layout_segment *fls = NULL;
 	struct xdr_stream stream;
@@ -502,14 +503,14 @@ ff_layout_alloc_lseg(struct pnfs_layout_hdr *lh,
 		if (rc)
 			goto out_err_free;
 
-		acred.uid = make_kuid(&init_user_ns, id);
+		acred.uid = make_kuid(user_ns, id);
 
 		/* group */
 		rc = decode_name(&stream, &id);
 		if (rc)
 			goto out_err_free;
 
-		acred.gid = make_kgid(&init_user_ns, id);
+		acred.gid = make_kgid(user_ns, id);
 
 		/* find the cred for it */
 		rcu_assign_pointer(cred, rpc_lookup_generic_cred(&acred, 0, gfp_flags));
@@ -539,8 +540,8 @@ ff_layout_alloc_lseg(struct pnfs_layout_hdr *lh,
 
 		dprintk("%s: iomode %s uid %u gid %u\n", __func__,
 			lgr->range.iomode == IOMODE_READ ? "READ" : "RW",
-			from_kuid(&init_user_ns, acred.uid),
-			from_kgid(&init_user_ns, acred.gid));
+			from_kuid(user_ns, acred.uid),
+			from_kgid(user_ns, acred.gid));
 	}
 
 	p = xdr_inline_decode(&stream, 4);

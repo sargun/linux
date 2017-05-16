@@ -427,8 +427,8 @@ nfs_fhget(struct super_block *sb, struct nfs_fh *fh, struct nfs_fattr *fattr, st
 		inode->i_version = 0;
 		inode->i_size = 0;
 		clear_nlink(inode);
-		inode->i_uid = make_kuid(&init_user_ns, -2);
-		inode->i_gid = make_kgid(&init_user_ns, -2);
+		inode->i_uid = make_kuid(sb->s_user_ns, -2);
+		inode->i_gid = make_kgid(sb->s_user_ns, -2);
 		inode->i_blocks = 0;
 		memset(nfsi->cookieverf, 0, sizeof(nfsi->cookieverf));
 		nfsi->write_io = 0;

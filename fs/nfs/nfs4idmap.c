@@ -713,6 +713,21 @@ idmap_release_pipe(struct inode *inode)
 	nfs_idmap_abort_pipe_upcall(idmap, -EPIPE);
 }
 
+static struct user_namespace* user_ns(const struct nfs_server *server) {
+	struct user_namespace *ns = &init_user_ns;
+
+	if (!server)
+		pr_debug("Server is null\n");
+	else if (!server->super)
+		pr_debug("Superblock is null\n");
+	else if (!server->super->s_user_ns)
+		pr_debug("s_user_ns is null\n");
+	else
+		ns = server->super->s_user_ns;
+
+	return ns;
+}
+
 int nfs_map_name_to_uid(const struct nfs_server *server, const char *name, size_t namelen, kuid_t *uid)
 {
 	struct idmap *idmap = server->nfs_client->cl_idmap;
@@ -722,7 +737,7 @@ int nfs_map_name_to_uid(const struct nfs_server *server, const char *name, size_
 	if (!nfs_map_string_to_numeric(name, namelen, &id))
 		ret = nfs_idmap_lookup_id(name, namelen, "uid", &id, idmap);
 	if (ret == 0) {
-		*uid = make_kuid(&init_user_ns, id);
+		*uid = make_kuid(user_ns(server), id);
 		if (!uid_valid(*uid))
 			ret = -ERANGE;
 	}
@@ -739,7 +754,7 @@ int nfs_map_group_to_gid(const struct nfs_server *server, const char *name, size
 	if (!nfs_map_string_to_numeric(name, namelen, &id))
 		ret = nfs_idmap_lookup_id(name, namelen, "gid", &id, idmap);
 	if (ret == 0) {
-		*gid = make_kgid(&init_user_ns, id);
+		*gid = make_kgid(user_ns(server), id);
 		if (!gid_valid(*gid))
 			ret = -ERANGE;
 	}
@@ -753,7 +768,7 @@ int nfs_map_uid_to_name(const struct nfs_server *server, kuid_t uid, char *buf, 
 	int ret = -EINVAL;
 	__u32 id;
 
-	id = from_kuid(&init_user_ns, uid);
+	id = from_kuid(user_ns(server), uid);
 	if (!(server->caps & NFS_CAP_UIDGID_NOMAP))
 		ret = nfs_idmap_lookup_name(id, "user", buf, buflen, idmap);
 	if (ret < 0)
@@ -767,7 +782,7 @@ int nfs_map_gid_to_group(const struct nfs_server *server, kgid_t gid, char *buf,
 	int ret = -EINVAL;
 	__u32 id;
 
-	id = from_kgid(&init_user_ns, gid);
+	id = from_kgid(user_ns(server), gid);
 	if (!(server->caps & NFS_CAP_UIDGID_NOMAP))
 		ret = nfs_idmap_lookup_name(id, "group", buf, buflen, idmap);
 	if (ret < 0)

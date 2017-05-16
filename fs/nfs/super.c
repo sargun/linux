@@ -941,6 +941,7 @@ static struct nfs_parsed_mount_data *nfs_alloc_parsed_mount_data(void)
 		data->minorversion	= 0;
 		data->need_mount	= true;
 		data->net		= current->nsproxy->net_ns;
+		data->user_ns		= 0;
 		security_init_mnt_opts(&data->lsm_opts);
 	}
 	return data;
@@ -2687,6 +2688,7 @@ EXPORT_SYMBOL_GPL(nfs_fs_mount_common);
 
 static int validate_user_ns(struct nfs_parsed_mount_data *args, int flags)
 {
+	dfprintk(MOUNT, "NFS: Running validate_user_ns\n");
 	if (args->user_ns != &init_user_ns && args->version != 4)
 		goto out_not_v4;
 
@@ -2738,7 +2740,7 @@ struct dentry *nfs_fs_mount(struct file_system_type *fs_type,
 	if (error == NFS_TEXT_DATA)
 		error = nfs_validate_text_mount_data(raw_data, mount_info.parsed, dev_name);
 
-	if (!error)
+	if (error >= 0)
 		error = validate_user_ns(mount_info.parsed, flags);
 
 	if (error < 0) {
