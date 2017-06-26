@@ -90,6 +90,7 @@ struct rpc_cred {
 struct rpc_cred_cache;
 struct rpc_authops;
 struct rpc_auth {
+	struct			user_namespace *user_ns;
 	unsigned int		au_cslack;	/* call cred size estimate */
 				/* guess at number of u32's auth adds before
 				 * reply data; normally the verifier size: */
@@ -115,6 +116,7 @@ struct rpc_auth {
 struct rpc_auth_create_args {
 	rpc_authflavor_t pseudoflavor;
 	const char *target_name;
+	struct user_namespace *user_ns;
 };
 
 /* Flags for rpcauth_lookupcred() */

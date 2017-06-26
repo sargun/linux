@@ -78,6 +78,7 @@ struct nfs_client_initdata {
 	int proto;
 	u32 minorversion;
 	struct net *net;
+	struct user_namespace *user_ns;
 	const struct rpc_timeout *timeparms;
 };
 

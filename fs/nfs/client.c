@@ -187,6 +187,8 @@ struct nfs_client *nfs_alloc_client(const struct nfs_client_initdata *cl_init)
 		clp->cl_machine_cred = cred;
 	nfs_fscache_get_client_cookie(clp);
 
+	clp->user_ns = get_user_ns(cl_init->user_ns);
+
 	return clp;
 
 error_cleanup:
@@ -252,6 +254,7 @@ void nfs_free_client(struct nfs_client *clp)
 		put_rpccred(clp->cl_machine_cred);
 
 	put_net(clp->cl_net);
+	put_user_ns(clp->user_ns);
 	put_nfs_version(clp->cl_nfs_mod);
 	kfree(clp->cl_hostname);
 	kfree(clp->cl_acceptor);
@@ -304,6 +307,10 @@ static struct nfs_client *nfs_match_client(const struct nfs_client_initdata *dat
 
 		/* Different NFS versions cannot share the same nfs_client */
 		if (clp->rpc_ops != data->nfs_mod->rpc_ops)
+			continue;
+
+		/* Different User Namespaces cannot share clients */
+		if (clp->user_ns != data->user_ns)
 			continue;
 
 		if (clp->cl_proto != data->proto)

@@ -27,23 +27,59 @@ struct unx_cred {
 # define RPCDBG_FACILITY	RPCDBG_AUTH
 #endif
 
-static struct rpc_auth		unix_auth;
+struct unix_auth {
+	struct rpc_auth 	rpc_auth;
+	struct user_namespace	*user_ns;
+};
 static const struct rpc_credops	unix_credops;
 
 static struct rpc_auth *
 unx_create(struct rpc_auth_create_args *args, struct rpc_clnt *clnt)
 {
+	struct unix_auth *unx_auth;
+	struct rpc_auth *rpc_auth;
+	int err;
+
 	dprintk("RPC:       creating UNIX authenticator for client %p\n",
 			clnt);
-	atomic_inc(&unix_auth.au_count);
-	return &unix_auth;
+	unx_auth = kmalloc(sizeof (*unx_auth), GFP_KERNEL);
+	if (!unx_auth)
+		return ERR_PTR(-ENOMEM);
+
+	rpc_auth = &unx_auth->rpc_auth;
+	err = rpcauth_init_credcache(rpc_auth);
+	if (err)
+		goto err_out;
+
+	if (args->user_ns)
+		unx_auth->user_ns = get_user_ns(args->user_ns);
+	else
+		unx_auth->user_ns = get_user_ns(&init_user_ns);
+
+	atomic_set(&rpc_auth->au_count, 1);
+	rpc_auth->au_cslack = UNX_CALLSLACK;
+	rpc_auth->au_rslack = NUL_REPLYSLACK;
+	rpc_auth->au_flags = RPCAUTH_AUTH_NO_CRKEY_TIMEOUT;
+	rpc_auth->au_ops = &authunix_ops;
+	rpc_auth->au_flavor = RPC_AUTH_UNIX;
+
+	return rpc_auth;
+
+err_out:
+	kfree(unx_auth);
+	return ERR_PTR(err);
 }
 
 static void
-unx_destroy(struct rpc_auth *auth)
+unx_destroy(struct rpc_auth *rpc_auth)
 {
-	dprintk("RPC:       destroying UNIX authenticator %p\n", auth);
-	rpcauth_clear_credcache(auth->au_credcache);
+	struct unix_auth *unx_auth = container_of(rpc_auth, struct unix_auth,
+						  rpc_auth);
+
+	rpcauth_destroy_credcache(rpc_auth);
+	put_user_ns(unx_auth->user_ns);
+	kfree(unx_auth);
+
 }
 
 static int
@@ -151,6 +187,8 @@ unx_marshal(struct rpc_task *task, __be32 *p)
 {
 	struct rpc_clnt	*clnt = task->tk_client;
 	struct unx_cred	*cred = container_of(task->tk_rqstp->rq_cred, struct unx_cred, uc_base);
+	struct rpc_auth *rpc_auth = task->tk_client->cl_auth;
+	struct unix_auth *unx_auth = container_of(rpc_auth, struct unix_auth, rpc_auth);
 	__be32		*base, *hold;
 	int		i;
 
@@ -163,11 +201,11 @@ unx_marshal(struct rpc_task *task, __be32 *p)
 	 */
 	p = xdr_encode_array(p, clnt->cl_nodename, clnt->cl_nodelen);
 
-	*p++ = htonl((u32) from_kuid(&init_user_ns, cred->uc_uid));
-	*p++ = htonl((u32) from_kgid(&init_user_ns, cred->uc_gid));
+	*p++ = htonl((u32) from_kuid(unx_auth->user_ns, cred->uc_uid));
+	*p++ = htonl((u32) from_kgid(unx_auth->user_ns, cred->uc_gid));
 	hold = p++;
 	for (i = 0; i < 16 && gid_valid(cred->uc_gids[i]); i++)
-		*p++ = htonl((u32) from_kgid(&init_user_ns, cred->uc_gids[i]));
+		*p++ = htonl((u32) from_kgid(unx_auth->user_ns, cred->uc_gids[i]));
 	*hold = htonl(p - hold - 1);		/* gid array length */
 	*base = htonl((p - base - 1) << 2);	/* cred length */
 
@@ -212,16 +250,6 @@ unx_validate(struct rpc_task *task, __be32 *p)
 	return p;
 }
 
-int __init rpc_init_authunix(void)
-{
-	return rpcauth_init_credcache(&unix_auth);
-}
-
-void rpc_destroy_authunix(void)
-{
-	rpcauth_destroy_credcache(&unix_auth);
-}
-
 const struct rpc_authops authunix_ops = {
 	.owner		= THIS_MODULE,
 	.au_flavor	= RPC_AUTH_UNIX,
@@ -234,16 +262,6 @@ const struct rpc_authops authunix_ops = {
 };
 
 static
-struct rpc_auth		unix_auth = {
-	.au_cslack	= UNX_CALLSLACK,
-	.au_rslack	= NUL_REPLYSLACK,
-	.au_flags	= RPCAUTH_AUTH_NO_CRKEY_TIMEOUT,
-	.au_ops		= &authunix_ops,
-	.au_flavor	= RPC_AUTH_UNIX,
-	.au_count	= ATOMIC_INIT(0),
-};
-
-static
 const struct rpc_credops unix_credops = {
 	.cr_name	= "AUTH_UNIX",
 	.crdestroy	= unx_destroy_cred,
@@ -253,3 +271,13 @@ const struct rpc_credops unix_credops = {
 	.crrefresh	= unx_refresh,
 	.crvalidate	= unx_validate,
 };
+
+int __init rpc_init_authunix(void)
+{
+	return 0;
+}
+
+void rpc_destroy_authunix(void)
+{
+}
+

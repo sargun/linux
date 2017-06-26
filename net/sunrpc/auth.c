@@ -873,6 +873,7 @@ int __init rpcauth_init_module(void)
 	err = rpc_init_authunix();
 	if (err < 0)
 		goto out1;
+
 	err = rpc_init_generic_auth();
 	if (err < 0)
 		goto out2;
