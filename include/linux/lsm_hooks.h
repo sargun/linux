@@ -28,6 +28,7 @@
 #include <linux/security.h>
 #include <linux/init.h>
 #include <linux/rculist.h>
+#include <linux/module.h>
 
 /**
  * union security_list_options - Linux Security Module hook function list
@@ -1982,6 +1983,255 @@ extern char *lsm_names;
 
 extern void security_add_hooks(struct security_hook_list *hooks, int count,
 				char *lsm);
+
+#ifdef CONFIG_SECURITY_DYNAMIC_HOOKS
+enum dynamic_security_hook_type {
+	DYNAMIC_SECURITY_HOOK_binder_set_context_mgr,
+	DYNAMIC_SECURITY_HOOK_binder_transaction,
+	DYNAMIC_SECURITY_HOOK_binder_transfer_binder,
+	DYNAMIC_SECURITY_HOOK_binder_transfer_file,
+	DYNAMIC_SECURITY_HOOK_ptrace_access_check,
+	DYNAMIC_SECURITY_HOOK_ptrace_traceme,
+	DYNAMIC_SECURITY_HOOK_capget,
+	DYNAMIC_SECURITY_HOOK_capset,
+	DYNAMIC_SECURITY_HOOK_capable,
+	DYNAMIC_SECURITY_HOOK_quotactl,
+	DYNAMIC_SECURITY_HOOK_quota_on,
+	DYNAMIC_SECURITY_HOOK_syslog,
+	DYNAMIC_SECURITY_HOOK_settime,
+	DYNAMIC_SECURITY_HOOK_vm_enough_memory,
+	DYNAMIC_SECURITY_HOOK_bprm_set_creds,
+	DYNAMIC_SECURITY_HOOK_bprm_check_security,
+	DYNAMIC_SECURITY_HOOK_bprm_committing_creds,
+	DYNAMIC_SECURITY_HOOK_bprm_committed_creds,
+	DYNAMIC_SECURITY_HOOK_sb_alloc_security,
+	DYNAMIC_SECURITY_HOOK_sb_free_security,
+	DYNAMIC_SECURITY_HOOK_sb_copy_data,
+	DYNAMIC_SECURITY_HOOK_sb_remount,
+	DYNAMIC_SECURITY_HOOK_sb_kern_mount,
+	DYNAMIC_SECURITY_HOOK_sb_show_options,
+	DYNAMIC_SECURITY_HOOK_sb_statfs,
+	DYNAMIC_SECURITY_HOOK_sb_mount,
+	DYNAMIC_SECURITY_HOOK_sb_umount,
+	DYNAMIC_SECURITY_HOOK_sb_pivotroot,
+	DYNAMIC_SECURITY_HOOK_sb_set_mnt_opts,
+	DYNAMIC_SECURITY_HOOK_sb_clone_mnt_opts,
+	DYNAMIC_SECURITY_HOOK_sb_parse_opts_str,
+	DYNAMIC_SECURITY_HOOK_dentry_init_security,
+	DYNAMIC_SECURITY_HOOK_dentry_create_files_as,
+#ifdef CONFIG_SECURITY_PATH
+	DYNAMIC_SECURITY_HOOK_path_unlink,
+	DYNAMIC_SECURITY_HOOK_path_mkdir,
+	DYNAMIC_SECURITY_HOOK_path_rmdir,
+	DYNAMIC_SECURITY_HOOK_path_mknod,
+	DYNAMIC_SECURITY_HOOK_path_truncate,
+	DYNAMIC_SECURITY_HOOK_path_symlink,
+	DYNAMIC_SECURITY_HOOK_path_link,
+	DYNAMIC_SECURITY_HOOK_path_rename,
+	DYNAMIC_SECURITY_HOOK_path_chmod,
+	DYNAMIC_SECURITY_HOOK_path_chown,
+	DYNAMIC_SECURITY_HOOK_path_chroot,
+#endif
+	DYNAMIC_SECURITY_HOOK_inode_alloc_security,
+	DYNAMIC_SECURITY_HOOK_inode_free_security,
+	DYNAMIC_SECURITY_HOOK_inode_init_security,
+	DYNAMIC_SECURITY_HOOK_inode_create,
+	DYNAMIC_SECURITY_HOOK_inode_link,
+	DYNAMIC_SECURITY_HOOK_inode_unlink,
+	DYNAMIC_SECURITY_HOOK_inode_symlink,
+	DYNAMIC_SECURITY_HOOK_inode_mkdir,
+	DYNAMIC_SECURITY_HOOK_inode_rmdir,
+	DYNAMIC_SECURITY_HOOK_inode_mknod,
+	DYNAMIC_SECURITY_HOOK_inode_rename,
+	DYNAMIC_SECURITY_HOOK_inode_readlink,
+	DYNAMIC_SECURITY_HOOK_inode_follow_link,
+	DYNAMIC_SECURITY_HOOK_inode_permission,
+	DYNAMIC_SECURITY_HOOK_inode_setattr,
+	DYNAMIC_SECURITY_HOOK_inode_getattr,
+	DYNAMIC_SECURITY_HOOK_inode_setxattr,
+	DYNAMIC_SECURITY_HOOK_inode_post_setxattr,
+	DYNAMIC_SECURITY_HOOK_inode_getxattr,
+	DYNAMIC_SECURITY_HOOK_inode_listxattr,
+	DYNAMIC_SECURITY_HOOK_inode_removexattr,
+	DYNAMIC_SECURITY_HOOK_inode_need_killpriv,
+	DYNAMIC_SECURITY_HOOK_inode_killpriv,
+	DYNAMIC_SECURITY_HOOK_inode_listsecurity,
+	DYNAMIC_SECURITY_HOOK_inode_getsecid,
+	DYNAMIC_SECURITY_HOOK_inode_copy_up,
+	DYNAMIC_SECURITY_HOOK_inode_copy_up_xattr,
+	DYNAMIC_SECURITY_HOOK_file_permission,
+	DYNAMIC_SECURITY_HOOK_file_alloc_security,
+	DYNAMIC_SECURITY_HOOK_file_free_security,
+	DYNAMIC_SECURITY_HOOK_file_ioctl,
+	DYNAMIC_SECURITY_HOOK_mmap_addr,
+	DYNAMIC_SECURITY_HOOK_mmap_file,
+	DYNAMIC_SECURITY_HOOK_file_mprotect,
+	DYNAMIC_SECURITY_HOOK_file_lock,
+	DYNAMIC_SECURITY_HOOK_file_fcntl,
+	DYNAMIC_SECURITY_HOOK_file_set_fowner,
+	DYNAMIC_SECURITY_HOOK_file_send_sigiotask,
+	DYNAMIC_SECURITY_HOOK_file_receive,
+	DYNAMIC_SECURITY_HOOK_file_open,
+	DYNAMIC_SECURITY_HOOK_task_alloc,
+	DYNAMIC_SECURITY_HOOK_task_free,
+	DYNAMIC_SECURITY_HOOK_cred_alloc_blank,
+	DYNAMIC_SECURITY_HOOK_cred_free,
+	DYNAMIC_SECURITY_HOOK_cred_prepare,
+	DYNAMIC_SECURITY_HOOK_cred_transfer,
+	DYNAMIC_SECURITY_HOOK_kernel_act_as,
+	DYNAMIC_SECURITY_HOOK_kernel_create_files_as,
+	DYNAMIC_SECURITY_HOOK_kernel_read_file,
+	DYNAMIC_SECURITY_HOOK_kernel_post_read_file,
+	DYNAMIC_SECURITY_HOOK_kernel_module_request,
+	DYNAMIC_SECURITY_HOOK_task_fix_setuid,
+	DYNAMIC_SECURITY_HOOK_task_setpgid,
+	DYNAMIC_SECURITY_HOOK_task_getpgid,
+	DYNAMIC_SECURITY_HOOK_task_getsid,
+	DYNAMIC_SECURITY_HOOK_task_getsecid,
+	DYNAMIC_SECURITY_HOOK_task_setnice,
+	DYNAMIC_SECURITY_HOOK_task_setioprio,
+	DYNAMIC_SECURITY_HOOK_task_getioprio,
+	DYNAMIC_SECURITY_HOOK_task_prlimit,
+	DYNAMIC_SECURITY_HOOK_task_setrlimit,
+	DYNAMIC_SECURITY_HOOK_task_setscheduler,
+	DYNAMIC_SECURITY_HOOK_task_getscheduler,
+	DYNAMIC_SECURITY_HOOK_task_movememory,
+	DYNAMIC_SECURITY_HOOK_task_kill,
+	DYNAMIC_SECURITY_HOOK_task_prctl,
+	DYNAMIC_SECURITY_HOOK_task_to_inode,
+	DYNAMIC_SECURITY_HOOK_ipc_permission,
+	DYNAMIC_SECURITY_HOOK_ipc_getsecid,
+	DYNAMIC_SECURITY_HOOK_msg_msg_alloc_security,
+	DYNAMIC_SECURITY_HOOK_msg_msg_free_security,
+	DYNAMIC_SECURITY_HOOK_msg_queue_alloc_security,
+	DYNAMIC_SECURITY_HOOK_msg_queue_free_security,
+	DYNAMIC_SECURITY_HOOK_msg_queue_associate,
+	DYNAMIC_SECURITY_HOOK_msg_queue_msgctl,
+	DYNAMIC_SECURITY_HOOK_msg_queue_msgsnd,
+	DYNAMIC_SECURITY_HOOK_msg_queue_msgrcv,
+	DYNAMIC_SECURITY_HOOK_shm_alloc_security,
+	DYNAMIC_SECURITY_HOOK_shm_free_security,
+	DYNAMIC_SECURITY_HOOK_shm_associate,
+	DYNAMIC_SECURITY_HOOK_shm_shmctl,
+	DYNAMIC_SECURITY_HOOK_shm_shmat,
+	DYNAMIC_SECURITY_HOOK_sem_alloc_security,
+	DYNAMIC_SECURITY_HOOK_sem_free_security,
+	DYNAMIC_SECURITY_HOOK_sem_associate,
+	DYNAMIC_SECURITY_HOOK_sem_semctl,
+	DYNAMIC_SECURITY_HOOK_sem_semop,
+	DYNAMIC_SECURITY_HOOK_netlink_send,
+	DYNAMIC_SECURITY_HOOK_d_instantiate,
+	DYNAMIC_SECURITY_HOOK_getprocattr,
+	DYNAMIC_SECURITY_HOOK_setprocattr,
+	DYNAMIC_SECURITY_HOOK_ismaclabel,
+	DYNAMIC_SECURITY_HOOK_secid_to_secctx,
+	DYNAMIC_SECURITY_HOOK_secctx_to_secid,
+	DYNAMIC_SECURITY_HOOK_release_secctx,
+	DYNAMIC_SECURITY_HOOK_inode_invalidate_secctx,
+	DYNAMIC_SECURITY_HOOK_inode_notifysecctx,
+	DYNAMIC_SECURITY_HOOK_inode_setsecctx,
+	DYNAMIC_SECURITY_HOOK_inode_getsecctx,
+#ifdef CONFIG_SECURITY_NETWORK
+	DYNAMIC_SECURITY_HOOK_unix_stream_connect,
+	DYNAMIC_SECURITY_HOOK_unix_may_send,
+	DYNAMIC_SECURITY_HOOK_socket_create,
+	DYNAMIC_SECURITY_HOOK_socket_post_create,
+	DYNAMIC_SECURITY_HOOK_socket_bind,
+	DYNAMIC_SECURITY_HOOK_socket_connect,
+	DYNAMIC_SECURITY_HOOK_socket_listen,
+	DYNAMIC_SECURITY_HOOK_socket_accept,
+	DYNAMIC_SECURITY_HOOK_socket_sendmsg,
+	DYNAMIC_SECURITY_HOOK_socket_recvmsg,
+	DYNAMIC_SECURITY_HOOK_socket_getsockname,
+	DYNAMIC_SECURITY_HOOK_socket_getpeername,
+	DYNAMIC_SECURITY_HOOK_socket_getsockopt,
+	DYNAMIC_SECURITY_HOOK_socket_setsockopt,
+	DYNAMIC_SECURITY_HOOK_socket_shutdown,
+	DYNAMIC_SECURITY_HOOK_socket_sock_rcv_skb,
+	DYNAMIC_SECURITY_HOOK_socket_getpeersec_stream,
+	DYNAMIC_SECURITY_HOOK_socket_getpeersec_dgram,
+	DYNAMIC_SECURITY_HOOK_sk_alloc_security,
+	DYNAMIC_SECURITY_HOOK_sk_free_security,
+	DYNAMIC_SECURITY_HOOK_sk_clone_security,
+	DYNAMIC_SECURITY_HOOK_sk_getsecid,
+	DYNAMIC_SECURITY_HOOK_sock_graft,
+	DYNAMIC_SECURITY_HOOK_inet_conn_request,
+	DYNAMIC_SECURITY_HOOK_inet_csk_clone,
+	DYNAMIC_SECURITY_HOOK_inet_conn_established,
+	DYNAMIC_SECURITY_HOOK_secmark_relabel_packet,
+	DYNAMIC_SECURITY_HOOK_secmark_refcount_inc,
+	DYNAMIC_SECURITY_HOOK_secmark_refcount_dec,
+	DYNAMIC_SECURITY_HOOK_req_classify_flow,
+	DYNAMIC_SECURITY_HOOK_tun_dev_alloc_security,
+	DYNAMIC_SECURITY_HOOK_tun_dev_free_security,
+	DYNAMIC_SECURITY_HOOK_tun_dev_create,
+	DYNAMIC_SECURITY_HOOK_tun_dev_attach_queue,
+	DYNAMIC_SECURITY_HOOK_tun_dev_attach,
+	DYNAMIC_SECURITY_HOOK_tun_dev_open,
+#endif	/* CONFIG_SECURITY_NETWORK */
+#ifdef CONFIG_SECURITY_INFINIBAND
+	DYNAMIC_SECURITY_HOOK_ib_pkey_access,
+	DYNAMIC_SECURITY_HOOK_ib_endport_manage_subnet,
+	DYNAMIC_SECURITY_HOOK_ib_alloc_security,
+	DYNAMIC_SECURITY_HOOK_ib_free_security,
+#endif	/* CONFIG_SECURITY_INFINIBAND */
+#ifdef CONFIG_SECURITY_NETWORK_XFRM
+	DYNAMIC_SECURITY_HOOK_xfrm_policy_alloc_security,
+	DYNAMIC_SECURITY_HOOK_xfrm_policy_clone_security,
+	DYNAMIC_SECURITY_HOOK_xfrm_policy_free_security,
+	DYNAMIC_SECURITY_HOOK_xfrm_policy_delete_security,
+	DYNAMIC_SECURITY_HOOK_xfrm_state_alloc,
+	DYNAMIC_SECURITY_HOOK_xfrm_state_alloc_acquire,
+	DYNAMIC_SECURITY_HOOK_xfrm_state_free_security,
+	DYNAMIC_SECURITY_HOOK_xfrm_state_delete_security,
+	DYNAMIC_SECURITY_HOOK_xfrm_policy_lookup,
+	DYNAMIC_SECURITY_HOOK_xfrm_decode_session,
+#endif	/* CONFIG_SECURITY_NETWORK_XFRM */
+#ifdef CONFIG_KEYS
+	DYNAMIC_SECURITY_HOOK_key_alloc,
+	DYNAMIC_SECURITY_HOOK_key_free,
+	DYNAMIC_SECURITY_HOOK_key_permission,
+	DYNAMIC_SECURITY_HOOK_key_getsecurity,
+#endif	/* CONFIG_KEYS */
+#ifdef CONFIG_AUDIT
+	DYNAMIC_SECURITY_HOOK_audit_rule_init,
+	DYNAMIC_SECURITY_HOOK_audit_rule_known,
+	DYNAMIC_SECURITY_HOOK_audit_rule_match,
+	DYNAMIC_SECURITY_HOOK_audit_rule_free,
+#endif /* CONFIG_AUDIT */
+#ifdef CONFIG_BPF_SYSCALL
+	DYNAMIC_SECURITY_HOOK_bpf,
+	DYNAMIC_SECURITY_HOOK_bpf_map,
+	DYNAMIC_SECURITY_HOOK_bpf_prog,
+	DYNAMIC_SECURITY_HOOK_bpf_map_alloc_security,
+	DYNAMIC_SECURITY_HOOK_bpf_map_free_security,
+	DYNAMIC_SECURITY_HOOK_bpf_prog_alloc_security,
+	DYNAMIC_SECURITY_HOOK_bpf_prog_free_security,
+#endif /* CONFIG_BPF_SYSCALL */
+	__MAX_DYNAMIC_SECURITY_HOOK,
+};
+
+struct dynamic_security_hook {
+	struct list_head		list;
+	union security_list_options	hook;
+	enum dynamic_security_hook_type type;
+	const char			*lsm;
+	struct module			*owner;
+};
+
+#define DYNAMIC_SECURITY_HOOK(NAME, LSM_NAME, TYPE, CALLBACK)	\
+static struct dynamic_security_hook NAME = {			\
+	.type		= DYNAMIC_SECURITY_HOOK_##TYPE,		\
+	.lsm		= LSM_NAME,				\
+	.hook.TYPE	= CALLBACK,				\
+	.owner		= THIS_MODULE,				\
+}
+
+
+
+extern int security_add_dynamic_hook(struct dynamic_security_hook *hook);
+extern void security_remove_dynamic_hook(struct dynamic_security_hook *hook);
+#endif
 
 #ifdef CONFIG_SECURITY_SELINUX_DISABLE
 /*

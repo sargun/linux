@@ -85,6 +85,15 @@ config SECURITY_PATH
 	  implement pathname based access controls.
 	  If you are unsure how to answer this question, answer N.
 
+config SECURITY_DYNAMIC_HOOKS
+	bool "Runtime loadable (minor) LSMs via LKMs"
+	depends on SECURITY && SRCU
+	help
+	  This enables LSMs which live in LKMs, and supports loading, and
+	  unloading them safely at runtime. These LSMs must be minor LSMs.
+	  They cannot circumvent the built-in LSMs.
+	  If you are unsure how to answer this question, answer N.
+
 config INTEL_TXT
 	bool "Enable Intel(R) Trusted Execution Technology (Intel(R) TXT)"
 	depends on HAVE_INTEL_TXT

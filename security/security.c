@@ -29,12 +29,12 @@
 #include <linux/backing-dev.h>
 #include <linux/string.h>
 #include <net/flow.h>
+#include "dynamic.h"
 
 #define MAX_LSM_EVM_XATTR	2
 
 /* Maximum number of letters for an LSM name string */
 #define SECURITY_NAME_MAX	10
-
 struct security_hook_heads security_hook_heads __lsm_ro_after_init;
 static ATOMIC_NOTIFIER_HEAD(lsm_notifier_chain);
 
@@ -66,6 +66,8 @@ int __init security_init(void)
 	for (i = 0; i < sizeof(security_hook_heads) / sizeof(struct list_head);
 	     i++)
 		INIT_LIST_HEAD(&list[i]);
+
+	security_init_dynamic_hooks();
 	pr_info("Security Framework initialized\n");
 
 	/*
@@ -197,14 +199,61 @@ EXPORT_SYMBOL(unregister_lsm_notifier);
  *	This is a hook that returns a value.
  */
 
+#define call_void_hook_builtin(FUNC, ...) do {			\
+	struct security_hook_list *P;				\
+	list_for_each_entry(P, &security_hook_heads.FUNC, list)	\
+		P->hook.FUNC(__VA_ARGS__);			\
+} while (0)
+
+#ifdef CONFIG_SECURITY_DYNAMIC_HOOKS
+#define IS_DYNAMIC_HOOK_ENABLED(FUNC) \
+static_branch_unlikely(&dynamic_hooks_keys[DYNAMIC_SECURITY_HOOK_##FUNC])
+
+#define call_void_hook_dynamic(FUNC, ...) ({			\
+	struct dynamic_security_hook *dsh;			\
+	struct dynamic_hook *dh;				\
+	dh = &dynamic_hooks[DYNAMIC_SECURITY_HOOK_##FUNC];	\
+	list_for_each_entry_rcu(dsh, &dh->head, list)		\
+		dsh->hook.FUNC(__VA_ARGS__);			\
+})
+
 #define call_void_hook(FUNC, ...)				\
 	do {							\
-		struct security_hook_list *P;			\
-								\
-		list_for_each_entry(P, &security_hook_heads.FUNC, list)	\
-			P->hook.FUNC(__VA_ARGS__);		\
+		call_void_hook_builtin(FUNC, __VA_ARGS__);	\
+		if (!IS_DYNAMIC_HOOK_ENABLED(FUNC))		\
+			break;					\
+		call_void_hook_dynamic(FUNC, __VA_ARGS__);	\
 	} while (0)
 
+#define call_int_hook(FUNC, IRC, ...) ({				\
+	int RC = IRC;							\
+	do {								\
+		struct dynamic_security_hook *dsh;			\
+		bool continue_iteration = true;				\
+		struct security_hook_list *P;				\
+		struct dynamic_hook *dh;				\
+		list_for_each_entry(P, &security_hook_heads.FUNC, list) { \
+			RC = P->hook.FUNC(__VA_ARGS__);			\
+			if (RC != 0) {					\
+				continue_iteration = false;		\
+				break;					\
+			}						\
+		}							\
+		if (!IS_DYNAMIC_HOOK_ENABLED(FUNC))			\
+			break;						\
+		if (!continue_iteration)				\
+			break;						\
+		dh = &dynamic_hooks[DYNAMIC_SECURITY_HOOK_##FUNC];	\
+		list_for_each_entry(dsh, &dh->head, list) {		\
+			RC = dsh->hook.FUNC(__VA_ARGS__);		\
+			if (RC != 0)					\
+				break;					\
+		}							\
+	} while (0);							\
+	RC;								\
+})
+
+#else
 #define call_int_hook(FUNC, IRC, ...) ({			\
 	int RC = IRC;						\
 	do {							\
@@ -218,6 +267,10 @@ EXPORT_SYMBOL(unregister_lsm_notifier);
 	} while (0);						\
 	RC;							\
 })
+
+#define call_void_hook	call_void_hook_builtin
+#endif
+
 
 /* Security operations */
 
@@ -304,6 +357,31 @@ int security_settime64(const struct timespec64 *ts, const struct timezone *tz)
 	return call_int_hook(settime, 0, ts, tz);
 }
 
+#ifdef CONFIG_SECURITY_DYNAMIC_HOOKS
+static int dynamic_vm_enough_memory_mm(struct mm_struct *mm, long pages)
+{
+	struct dynamic_security_hook *dsh;
+	struct dynamic_hook *dh;
+	int rc = 1;
+
+	if (!IS_DYNAMIC_HOOK_ENABLED(vm_enough_memory))
+		return 1;
+
+	dh = &dynamic_hooks[DYNAMIC_SECURITY_HOOK_vm_enough_memory];
+	list_for_each_entry(dsh, &dh->head, list) {
+		rc = dsh->hook.vm_enough_memory(mm, pages);
+		if (rc <= 0)
+			break;
+	}
+	return rc;
+}
+#else
+static int dynamic_vm_enough_memory_mm(struct mm_struct *mm, long pages)
+{
+	return 1;
+}
+#endif
+
 int security_vm_enough_memory_mm(struct mm_struct *mm, long pages)
 {
 	struct security_hook_list *hp;
@@ -321,9 +399,13 @@ int security_vm_enough_memory_mm(struct mm_struct *mm, long pages)
 		rc = hp->hook.vm_enough_memory(mm, pages);
 		if (rc <= 0) {
 			cap_sys_admin = 0;
-			break;
+			goto out;
 		}
 	}
+
+	if (dynamic_vm_enough_memory_mm(mm, pages) <= 0)
+		cap_sys_admin = 0;
+out:
 	return __vm_enough_memory(mm, pages, cap_sys_admin);
 }
 
@@ -1119,6 +1201,42 @@ int security_task_kill(struct task_struct *p, struct siginfo *info,
 	return call_int_hook(task_kill, 0, p, info, sig, secid);
 }
 
+#ifdef CONFIG_SECURITY_DYNAMIC_HOOKS
+static int dynamic_task_prctl(int option, unsigned long arg2,
+			      unsigned long arg3, unsigned long arg4,
+			      unsigned long arg5)
+{
+	struct dynamic_security_hook *dsh;
+	struct dynamic_hook *dh;
+	int rc = -ENOSYS;
+	int thisrc;
+
+	if (!IS_DYNAMIC_HOOK_ENABLED(task_prctl))
+		goto out;
+
+	dh = &dynamic_hooks[DYNAMIC_SECURITY_HOOK_task_prctl];
+	list_for_each_entry(dsh, &dh->head, list) {
+		thisrc = dsh->hook.task_prctl(option, arg2, arg3, arg4, arg5);
+		if (thisrc != -ENOSYS) {
+			rc = thisrc;
+			if (thisrc != 0)
+				break;
+		}
+	}
+
+out:
+	return rc;
+}
+#else
+static int dynamic_task_prctl(int option, unsigned long arg2,
+			      unsigned long arg3, unsigned long arg4,
+			      unsigned long arg5)
+{
+	return -ENOSYS;
+}
+
+#endif
+
 int security_task_prctl(int option, unsigned long arg2, unsigned long arg3,
 			 unsigned long arg4, unsigned long arg5)
 {
@@ -1131,9 +1249,12 @@ int security_task_prctl(int option, unsigned long arg2, unsigned long arg3,
 		if (thisrc != -ENOSYS) {
 			rc = thisrc;
 			if (thisrc != 0)
-				break;
+				goto out;
 		}
 	}
+
+	rc = dynamic_task_prctl(option, arg2, arg3, arg4, arg5);
+out:
 	return rc;
 }
 
