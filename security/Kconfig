@@ -94,6 +94,13 @@ config SECURITY_DYNAMIC_HOOKS
 	  They cannot circumvent the built-in LSMs.
 	  If you are unsure how to answer this question, answer N.
 
+config SECURITY_DYNAMIC_HOOKS_FS
+	bool
+	default y if SECURITY_DYNAMIC_HOOKS && SECURITYFS
+	depends on SECURITY_DYNAMIC_HOOKS && SECURITYFS
+	help
+	  This option enables listing of dynamically loaded LSM hooks.
+
 config INTEL_TXT
 	bool "Enable Intel(R) Trusted Execution Technology (Intel(R) TXT)"
 	depends on HAVE_INTEL_TXT

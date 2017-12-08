@@ -22,6 +22,7 @@
 #include <linux/security.h>
 #include <linux/lsm_hooks.h>
 #include <linux/magic.h>
+#include "dynamic.h"
 
 static struct vfsmount *mount;
 static int mount_count;
@@ -335,6 +336,7 @@ static int __init securityfs_init(void)
 		sysfs_remove_mount_point(kernel_kobj, "security");
 		return retval;
 	}
+	securityfs_init_dynamic_hooks();
 #ifdef CONFIG_SECURITY
 	lsm_dentry = securityfs_create_file("lsm", 0444, NULL, NULL,
 						&lsm_ops);

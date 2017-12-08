@@ -29,6 +29,8 @@
 #include <linux/init.h>
 #include <linux/rculist.h>
 #include <linux/module.h>
+#include <linux/percpu_counter.h>
+#include <linux/percpu.h>
 
 /**
  * union security_list_options - Linux Security Module hook function list
@@ -2212,6 +2214,8 @@ enum dynamic_security_hook_type {
 };
 
 struct dynamic_security_hook {
+	struct percpu_counter		invocation;
+	struct percpu_counter		deny;
 	struct list_head		list;
 	union security_list_options	hook;
 	enum dynamic_security_hook_type type;

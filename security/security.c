@@ -213,8 +213,11 @@ static_branch_unlikely(&dynamic_hooks_keys[DYNAMIC_SECURITY_HOOK_##FUNC])
 	struct dynamic_security_hook *dsh;			\
 	struct dynamic_hook *dh;				\
 	dh = &dynamic_hooks[DYNAMIC_SECURITY_HOOK_##FUNC];	\
-	list_for_each_entry_rcu(dsh, &dh->head, list)		\
+	percpu_counter_inc(&dh->invocation);			\
+	list_for_each_entry_rcu(dsh, &dh->head, list) {		\
+		percpu_counter_inc(&dsh->invocation);		\
 		dsh->hook.FUNC(__VA_ARGS__);			\
+	}							\
 })
 
 #define call_void_hook(FUNC, ...)				\
@@ -244,10 +247,15 @@ static_branch_unlikely(&dynamic_hooks_keys[DYNAMIC_SECURITY_HOOK_##FUNC])
 		if (!continue_iteration)				\
 			break;						\
 		dh = &dynamic_hooks[DYNAMIC_SECURITY_HOOK_##FUNC];	\
+		percpu_counter_inc(&dh->invocation);			\
 		list_for_each_entry(dsh, &dh->head, list) {		\
+			percpu_counter_inc(&dsh->invocation);		\
 			RC = dsh->hook.FUNC(__VA_ARGS__);		\
-			if (RC != 0)					\
+			if (RC != 0) {					\
+				percpu_counter_inc(&dh->deny);		\
+				percpu_counter_inc(&dsh->deny);		\
 				break;					\
+			}						\
 		}							\
 	} while (0);							\
 	RC;								\
@@ -368,10 +376,15 @@ static int dynamic_vm_enough_memory_mm(struct mm_struct *mm, long pages)
 		return 1;
 
 	dh = &dynamic_hooks[DYNAMIC_SECURITY_HOOK_vm_enough_memory];
+	percpu_counter_inc(&dh->invocation);
 	list_for_each_entry(dsh, &dh->head, list) {
+		percpu_counter_inc(&dsh->invocation);
 		rc = dsh->hook.vm_enough_memory(mm, pages);
-		if (rc <= 0)
+		if (rc <= 0) {
+			percpu_counter_inc(&dh->deny);
+			percpu_counter_inc(&dsh->deny);
 			break;
+		}
 	}
 	return rc;
 }
@@ -1215,7 +1228,9 @@ static int dynamic_task_prctl(int option, unsigned long arg2,
 		goto out;
 
 	dh = &dynamic_hooks[DYNAMIC_SECURITY_HOOK_task_prctl];
+	percpu_counter_inc(&dh->invocation);
 	list_for_each_entry(dsh, &dh->head, list) {
+		percpu_counter_inc(&dsh->invocation);
 		thisrc = dsh->hook.task_prctl(option, arg2, arg3, arg4, arg5);
 		if (thisrc != -ENOSYS) {
 			rc = thisrc;

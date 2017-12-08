@@ -250,7 +250,17 @@ struct dynamic_hook dynamic_hooks[__MAX_DYNAMIC_SECURITY_HOOK] = {
  */
 int security_add_dynamic_hook(struct dynamic_security_hook *hook)
 {
+	int ret;
+
 	WARN_ON(!try_module_get(hook->owner));
+	ret = percpu_counter_init(&hook->invocation, 0, GFP_KERNEL);
+	if (ret)
+		return ret;
+	ret = percpu_counter_init(&hook->deny, 0, GFP_KERNEL);
+	if (ret) {
+		percpu_counter_destroy(&hook->invocation);
+		return ret;
+	}
 	mutex_lock(&dynamic_hook_lock);
 	list_add_tail_rcu(&hook->list, &dynamic_hooks[hook->type].head);
 	mutex_unlock(&dynamic_hook_lock);
@@ -262,8 +272,20 @@ EXPORT_SYMBOL_GPL(security_add_dynamic_hook);
 
 void __init security_init_dynamic_hooks(void)
 {
-	int i;
+	int i, ret;
 
-	for (i = 0; i < ARRAY_SIZE(dynamic_hooks); i++)
+	for (i = 0; i < ARRAY_SIZE(dynamic_hooks); i++) {
 		INIT_LIST_HEAD(&dynamic_hooks[i].head);
+		ret = percpu_counter_init(&dynamic_hooks[i].invocation, 0,
+					  GFP_KERNEL);
+		if (ret)
+			panic("%s - %d - Cannot init invocation counter.\n",
+			      __func__, ret);
+		ret = percpu_counter_init(&dynamic_hooks[i].deny, 0,
+					  GFP_KERNEL);
+		if (ret)
+			panic("%s - %d - Cannot init deny counter.\n",
+			      __func__, ret);
+
+	}
 }

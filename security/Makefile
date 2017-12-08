@@ -19,6 +19,7 @@ obj-$(CONFIG_MMU)			+= min_addr.o
 obj-$(CONFIG_SECURITY)			+= security.o
 obj-$(CONFIG_SECURITYFS)		+= inode.o
 obj-$(CONFIG_SECURITY_DYNAMIC_HOOKS)	+= dynamic.o
+obj-$(CONFIG_SECURITY_DYNAMIC_HOOKS_FS)	+= dynamicfs.o
 obj-$(CONFIG_SECURITY_SELINUX)		+= selinux/
 obj-$(CONFIG_SECURITY_SMACK)		+= smack/
 obj-$(CONFIG_AUDIT)			+= lsm_audit.o
