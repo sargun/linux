@@ -31,7 +31,8 @@ create_package() {
 
 	# Create the package
 	dpkg-gencontrol $forcearch -Vkernel:debarch="${debarch}" -p$pname -P"$pdir"
-	dpkg --build "$pdir" ..
+#	dpkg --build "$pdir" ..
+	dpkg-deb --build -z0 "$pdir" ..
 }
 
 set_debarch() {
