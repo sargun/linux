@@ -401,6 +401,13 @@ config SECCOMP_FILTER
 
 	  See Documentation/prctl/seccomp_filter.txt for details.
 
+config SECCOMP_FILTER_EXTENDED
+	bool "Extended BPF seccomp filters"
+	depends on SECCOMP_FILTER && BPF_SYSCALL
+	help
+	  Enables seccomp filters to be written in eBPF, as opposed
+	  to just cBPF filters.
+
 config HAVE_GCC_PLUGINS
 	bool
 	help

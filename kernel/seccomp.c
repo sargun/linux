@@ -37,6 +37,7 @@
 #include <linux/security.h>
 #include <linux/tracehook.h>
 #include <linux/uaccess.h>
+#include <linux/bpf.h>
 
 /**
  * struct seccomp_filter - container for seccomp BPF programs
@@ -367,17 +368,6 @@ static struct seccomp_filter *seccomp_prepare_filter(struct sock_fprog *fprog)
 
 	BUG_ON(INT_MAX / fprog->len < sizeof(struct sock_filter));
 
-	/*
-	 * Installing a seccomp filter requires that the task has
-	 * CAP_SYS_ADMIN in its namespace or be running with no_new_privs.
-	 * This avoids scenarios where unprivileged tasks can affect the
-	 * behavior of privileged children.
-	 */
-	if (!task_no_new_privs(current) &&
-	    security_capable_noaudit(current_cred(), current_user_ns(),
-				     CAP_SYS_ADMIN) != 0)
-		return ERR_PTR(-EACCES);
-
 	/* Allocate a new seccomp_filter */
 	sfilter = kzalloc(sizeof(*sfilter), GFP_KERNEL | __GFP_NOWARN);
 	if (!sfilter)
@@ -422,6 +412,48 @@ seccomp_prepare_user_filter(const char __user *user_filter)
 out:
 	return filter;
 }
+
+#ifdef CONFIG_SECCOMP_FILTER_EXTENDED
+/**
+ * seccomp_prepare_extended_filter - prepares a user-supplied eBPF fd
+ * @user_filter: pointer to the user data containing an fd.
+ *
+ * Returns 0 on success and non-zero otherwise.
+ */
+static struct seccomp_filter *
+seccomp_prepare_extended_filter(const char __user *user_fd)
+{
+	struct seccomp_filter *sfilter;
+	struct bpf_prog *fp;
+	int fd;
+
+	/* Fetch the fd from userspace */
+	if (get_user(fd, (int __user *)user_fd))
+		return ERR_PTR(-EFAULT);
+
+	/* Allocate a new seccomp_filter */
+	sfilter = kzalloc(sizeof(*sfilter), GFP_KERNEL | __GFP_NOWARN);
+	if (!sfilter)
+		return ERR_PTR(-ENOMEM);
+
+	fp = bpf_prog_get_type(fd, BPF_PROG_TYPE_SECCOMP);
+	if (IS_ERR(fp)) {
+		kfree(sfilter);
+		return ERR_CAST(fp);
+	}
+
+	sfilter->prog = fp;
+	refcount_set(&sfilter->usage, 1);
+
+	return sfilter;
+}
+#else
+static struct seccomp_filter *
+seccomp_prepare_extended_filter(const char __user *filter_fd)
+{
+	return ERR_PTR(-EINVAL);
+}
+#endif
 
 /**
  * seccomp_attach_filter: validate and attach filter
@@ -492,7 +524,10 @@ void get_seccomp_filter(struct task_struct *tsk)
 static inline void seccomp_filter_free(struct seccomp_filter *filter)
 {
 	if (filter) {
-		bpf_prog_destroy(filter->prog);
+		if (bpf_prog_was_classic(filter->prog))
+			bpf_prog_destroy(filter->prog);
+		else
+			bpf_prog_put(filter->prog);
 		kfree(filter);
 	}
 }
@@ -842,18 +877,36 @@ out:
  * Returns 0 on success or -EINVAL on failure.
  */
 static long seccomp_set_mode_filter(unsigned int flags,
-				    const char __user *filter)
+				    const char __user *filter,
+				    unsigned long filter_type)
 {
-	const unsigned long seccomp_mode = SECCOMP_MODE_FILTER;
+	/* We use SECCOMP_MODE_FILTER for both eBPF and cBPF filters */
+	const unsigned long filter_mode = SECCOMP_MODE_FILTER;
 	struct seccomp_filter *prepared = NULL;
 	long ret = -EINVAL;
 
 	/* Validate flags. */
 	if (flags & ~SECCOMP_FILTER_FLAG_MASK)
 		return -EINVAL;
+	/*
+	 * Installing a seccomp filter requires that the task has
+	 * CAP_SYS_ADMIN in its namespace or be running with no_new_privs.
+	 * This avoids scenarios where unprivileged tasks can affect the
+	 * behavior of privileged children.
+	 */
+	if (!task_no_new_privs(current) &&
+	    security_capable_noaudit(current_cred(), current_user_ns(),
+				     CAP_SYS_ADMIN) != 0)
+		return -EACCES;
 
 	/* Prepare the new filter before holding any locks. */
-	prepared = seccomp_prepare_user_filter(filter);
+	if (filter_type == SECCOMP_SET_MODE_FILTER_EXTENDED)
+		prepared = seccomp_prepare_extended_filter(filter);
+	else if (filter_type == SECCOMP_SET_MODE_FILTER)
+		prepared = seccomp_prepare_user_filter(filter);
+	else
+		return -EINVAL;
+
 	if (IS_ERR(prepared))
 		return PTR_ERR(prepared);
 
@@ -867,7 +920,7 @@ static long seccomp_set_mode_filter(unsigned int flags,
 
 	spin_lock_irq(&current->sighand->siglock);
 
-	if (!seccomp_may_assign_mode(seccomp_mode))
+	if (!seccomp_may_assign_mode(filter_mode))
 		goto out;
 
 	ret = seccomp_attach_filter(flags, prepared);
@@ -876,7 +929,7 @@ static long seccomp_set_mode_filter(unsigned int flags,
 	/* Do not free the successfully attached filter. */
 	prepared = NULL;
 
-	seccomp_assign_mode(current, seccomp_mode);
+	seccomp_assign_mode(current, filter_mode);
 out:
 	spin_unlock_irq(&current->sighand->siglock);
 	if (flags & SECCOMP_FILTER_FLAG_TSYNC)
@@ -926,7 +979,9 @@ static long do_seccomp(unsigned int op, unsigned int flags,
 			return -EINVAL;
 		return seccomp_set_mode_strict();
 	case SECCOMP_SET_MODE_FILTER:
-		return seccomp_set_mode_filter(flags, uargs);
+		return seccomp_set_mode_filter(flags, uargs, op);
+	case SECCOMP_SET_MODE_FILTER_EXTENDED:
+		return seccomp_set_mode_filter(flags, uargs, op);
 	case SECCOMP_GET_ACTION_AVAIL:
 		if (flags != 0)
 			return -EINVAL;
@@ -967,6 +1022,10 @@ long prctl_set_seccomp(unsigned long seccomp_mode, char __user *filter)
 		break;
 	case SECCOMP_MODE_FILTER:
 		op = SECCOMP_SET_MODE_FILTER;
+		uargs = filter;
+		break;
+	case SECCOMP_MODE_FILTER_EXTENDED:
+		op = SECCOMP_SET_MODE_FILTER_EXTENDED;
 		uargs = filter;
 		break;
 	default:
@@ -1040,8 +1099,7 @@ long seccomp_get_filter(struct task_struct *task, unsigned long filter_off,
 	if (IS_ERR(filter))
 		return PTR_ERR(filter);
 
-	fprog = filter->prog->orig_prog;
-	if (!fprog) {
+	if (!bpf_prog_was_classic(filter->prog)) {
 		/* This must be a new non-cBPF filter, since we save
 		 * every cBPF filter's orig_prog above when
 		 * CONFIG_CHECKPOINT_RESTORE is enabled.
@@ -1050,6 +1108,7 @@ long seccomp_get_filter(struct task_struct *task, unsigned long filter_off,
 		goto out;
 	}
 
+	fprog = filter->prog->orig_prog;
 	ret = fprog->len;
 	if (!data)
 		goto out;
@@ -1238,6 +1297,55 @@ static int seccomp_actions_logged_handler(struct ctl_table *ro_table, int write,
 
 	return 0;
 }
+
+#ifdef CONFIG_SECCOMP_FILTER_EXTENDED
+static bool seccomp_is_valid_access(int off, int size,
+				    enum bpf_access_type type,
+				    struct bpf_insn_access_aux *info)
+{
+	if (type != BPF_READ)
+		return false;
+
+	if (off < 0 || off + size > sizeof(struct seccomp_data))
+		return false;
+
+	switch (off) {
+	case bpf_ctx_range_till(struct seccomp_data, args[0], args[5]):
+		return (size == sizeof(__u64));
+	case bpf_ctx_range(struct seccomp_data, nr):
+		return (size == FIELD_SIZEOF(struct seccomp_data, nr));
+	case bpf_ctx_range(struct seccomp_data, arch):
+		return (size == FIELD_SIZEOF(struct seccomp_data, arch));
+	case bpf_ctx_range(struct seccomp_data, instruction_pointer):
+		return (size == FIELD_SIZEOF(struct seccomp_data,
+					     instruction_pointer));
+	}
+
+	return false;
+}
+
+static const struct bpf_func_proto *
+seccomp_func_proto(enum bpf_func_id func_id)
+{
+	switch (func_id) {
+	case BPF_FUNC_get_current_uid_gid:
+		return &bpf_get_current_uid_gid_proto;
+	case BPF_FUNC_trace_printk:
+		if (capable(CAP_SYS_ADMIN))
+			return bpf_get_trace_printk_proto();
+	default:
+		return NULL;
+	}
+}
+
+const struct bpf_prog_ops seccomp_prog_ops = {
+};
+
+const struct bpf_verifier_ops seccomp_verifier_ops = {
+	.get_func_proto		= seccomp_func_proto,
+	.is_valid_access	= seccomp_is_valid_access,
+};
+#endif /* CONFIG_SECCOMP_FILTER_EXTENDED */
 
 static struct ctl_path seccomp_sysctl_path[] = {
 	{ .procname = "kernel", },
