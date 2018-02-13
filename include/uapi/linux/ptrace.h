@@ -65,8 +65,9 @@ struct ptrace_peeksiginfo_args {
 #define PTRACE_GETSIGMASK	0x420a
 #define PTRACE_SETSIGMASK	0x420b
 
-#define PTRACE_SECCOMP_GET_FILTER	0x420c
-#define PTRACE_SECCOMP_GET_METADATA	0x420d
+#define PTRACE_SECCOMP_GET_FILTER		0x420c
+#define PTRACE_SECCOMP_GET_METADATA		0x420d
+#define PTRACE_SECCOMP_GET_FILTER_EXTENDED	0x420e
 
 struct seccomp_metadata {
 	unsigned long filter_off;	/* Input: which filter */

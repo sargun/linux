@@ -1096,6 +1096,9 @@ int ptrace_request(struct task_struct *child, long request,
 		ret = seccomp_get_metadata(child, addr, datavp);
 		break;
 
+	case PTRACE_SECCOMP_GET_FILTER_EXTENDED:
+		ret = seccomp_get_filter_extended(child, addr, datavp);
+
 	default:
 		break;
 	}
