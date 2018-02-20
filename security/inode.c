@@ -22,6 +22,10 @@
 #include <linux/security.h>
 #include <linux/lsm_hooks.h>
 #include <linux/magic.h>
+#include <linux/mutex.h>
+
+extern char *lsm_names;
+extern struct mutex lsm_lock;
 
 static struct vfsmount *mount;
 static int mount_count;
@@ -312,8 +316,13 @@ static struct dentry *lsm_dentry;
 static ssize_t lsm_read(struct file *filp, char __user *buf, size_t count,
 			loff_t *ppos)
 {
-	return simple_read_from_buffer(buf, count, ppos, lsm_names,
-		strlen(lsm_names));
+	ssize_t ret;
+
+	mutex_lock(&lsm_lock);
+	ret = simple_read_from_buffer(buf, count, ppos, lsm_names,
+				      strlen(lsm_names));
+	mutex_unlock(&lsm_lock);
+	return ret;
 }
 
 static const struct file_operations lsm_ops = {

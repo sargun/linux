@@ -28,6 +28,7 @@
 #include <linux/security.h>
 #include <linux/init.h>
 #include <linux/rculist.h>
+#include <linux/module.h>
 
 /**
  * union security_list_options - Linux Security Module hook function list
@@ -1968,6 +1969,9 @@ struct security_hook_list {
 	enum lsm_hook			head_idx;
 	union security_list_options	hook;
 	char				*lsm;
+#ifdef CONFIG_SECURITY_DYNAMIC_HOOKS
+	struct module			*owner;
+#endif
 } __randomize_layout;
 
 /*
@@ -1976,11 +1980,24 @@ struct security_hook_list {
  * care of the common case and reduces the amount of
  * text involved.
  */
+#ifdef CONFIG_SECURITY_DYNAMIC_HOOKS
+#define LSM_HOOK_INIT(HEAD, HOOK)		\
+	{					\
+		.head_idx = HOOK_IDX(HEAD),	\
+		.hook = { .HEAD = HOOK },	\
+		.owner = THIS_MODULE,		\
+	}
+
+#else
 #define LSM_HOOK_INIT(HEAD, HOOK) \
 	{ .head_idx = HOOK_IDX(HEAD), .hook = { .HEAD = HOOK } }
+#endif
 
-extern char *lsm_names;
-
+#ifdef CONFIG_SECURITY_DYNAMIC_HOOKS
+extern void security_add_dynamic_hooks(struct security_hook_list *hooks,
+					int count,
+					char *lsm);
+#endif
 extern void security_add_hooks(struct security_hook_list *hooks, int count,
 				char *lsm);
 
