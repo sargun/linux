@@ -3601,6 +3601,29 @@ skip:
 	}
 }
 
+TEST(user_notification_garbage)
+{
+	/*
+	 * intentionally set pid to a garbage value to make sure the kernel
+	 * catches it
+	 */
+	struct seccomp_notif req = {
+		.pid	= 1,
+	};
+	int ret, listener;
+
+	ret = prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+	ASSERT_EQ(0, ret) {
+		TH_LOG("Kernel does not support PR_SET_NO_NEW_PRIVS!");
+	}
+
+	listener = user_trap_syscall(__NR_dup, SECCOMP_FILTER_FLAG_NEW_LISTENER);
+	ASSERT_GE(listener, 0);
+
+	EXPECT_EQ(-1, ioctl(listener, SECCOMP_IOCTL_NOTIF_RECV, &req));
+	EXPECT_EQ(EINVAL, errno);
+}
+
 /*
  * TODO:
  * - add microbenchmarks
