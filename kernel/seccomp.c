@@ -41,6 +41,9 @@
 #include <linux/tracehook.h>
 #include <linux/uaccess.h>
 #include <linux/anon_inodes.h>
+#include <net/netprio_cgroup.h>
+#include <net/sock.h>
+#include <net/cls_cgroup.h>
 
 enum notify_state {
 	SECCOMP_NOTIFY_INIT,
@@ -108,6 +111,7 @@ struct seccomp_kaddfd {
 	struct file *file;
 	int fd;
 	unsigned int flags;
+	bool move;
 
 	/* To only be set on reply */
 	int ret;
@@ -769,7 +773,8 @@ static u64 seccomp_next_notify_id(struct seccomp_filter *filter)
 
 static void seccomp_handle_addfd(struct seccomp_kaddfd *addfd)
 {
-	int ret;
+	struct socket *sock;
+	int err, ret;
 
 	/*
 	 * Remove the notification, and reset the list pointers, indicating
@@ -785,11 +790,28 @@ static void seccomp_handle_addfd(struct seccomp_kaddfd *addfd)
 		ret = replace_fd(addfd->fd, addfd->file, addfd->flags);
 		if (ret >= 0)
 			fput(addfd->file);
+		else
+			goto out;
 	} else {
 		ret = get_unused_fd_flags(addfd->flags);
 		if (ret >= 0)
 			fd_install(ret, addfd->file);
+		else
+			goto out;
 	}
+
+	if (addfd->move) {
+		sock = sock_from_file(addfd->file, &err);
+		if (sock) {
+			sock_update_netprioidx(&sock->sk->sk_cgrp_data);
+			sock_update_classid(&sock->sk->sk_cgrp_data);
+		}
+	}
+	/*
+	 * An extra reference is taken on the ioctl side, so upon success, we
+	 * must consume all references (and on failure, none).
+	 */
+	fput(addfd->file);
 
 out:
 	addfd->ret = ret;
@@ -1279,16 +1301,17 @@ static long seccomp_notify_addfd(struct seccomp_filter *filter,
 	if (addfd.fd_flags & (~O_CLOEXEC))
 		return -EINVAL;
 
-	if (addfd.flags & ~(SECCOMP_ADDFD_FLAG_SETFD))
+	if (addfd.flags & ~(SECCOMP_ADDFD_FLAG_SETFD|SECCOMP_ADDFD_FLAG_MOVE))
 		return -EINVAL;
 
 	if (addfd.remote_fd && !(addfd.flags & SECCOMP_ADDFD_FLAG_SETFD))
 		return -EINVAL;
 
-	kaddfd.file = fget(addfd.fd);
+	kaddfd.file = fget_many(addfd.fd, 2);
 	if (!kaddfd.file)
 		return -EBADF;
 
+	kaddfd.move = (addfd.flags & SECCOMP_ADDFD_FLAG_MOVE);
 	kaddfd.flags = addfd.fd_flags;
 	kaddfd.fd = (addfd.flags & SECCOMP_ADDFD_FLAG_SETFD) ?
 		    addfd.remote_fd : -1;
@@ -1339,7 +1362,7 @@ out_unlock:
 	mutex_unlock(&filter->notify_lock);
 out:
 	if (ret < 0)
-		fput(kaddfd.file);
+		fput_many(kaddfd.file, 2);
 
 	return ret;
 }

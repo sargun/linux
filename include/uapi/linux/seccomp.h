@@ -115,6 +115,14 @@ struct seccomp_notif_resp {
 
 /* valid flags for seccomp_notif_addfd */
 #define SECCOMP_ADDFD_FLAG_SETFD	(1UL << 0) /* Specify remote fd */
+/*
+ * Certain file descriptors are behave differently depending on the process
+ * they are created in. Specifcally, sockets, and their interactions with the
+ * net_cls and net_prio cgroup v1 controllers. This "moves" the file descriptor
+ * so that it takes on the cgroup controller's configuration in the process
+ * that the file descriptor is being added to.
+ */
+#define SECCOMP_ADDFD_FLAG_MOVE		(1UL << 1)
 
 /**
  * struct seccomp_notif_addfd
