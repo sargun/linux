@@ -938,15 +938,19 @@ out_unlock:
  * File Receive - Receive a file from another process
  *
  * This function is designed to receive files from other tasks. It encapsulates
- * logic around security and cgroups. The file descriptor provided must be a
- * freshly allocated (unused) file descriptor.
+ * logic around security and cgroups. It can either replace an existing file
+ * descriptor, or install the file at a new unused one. If the file is meant
+ * to be installed on a new file descriptor, it must be allocated with the
+ * right flags by the user and the flags passed must be 0 -- as anything else
+ * is ignored.
  *
  * This helper does not consume a reference to the file, so the caller must put
  * their reference.
  *
  * Returns 0 upon success.
  */
-int file_receive(int fd, struct file *file)
+static int __file_receive(int fd, unsigned int flags, struct file *file,
+			  bool replace)
 {
 	struct socket *sock;
 	int err;
@@ -955,7 +959,14 @@ int file_receive(int fd, struct file *file)
 	if (err)
 		return err;
 
-	fd_install(fd, get_file(file));
+	if (replace) {
+		err = replace_fd(fd, file, flags);
+		if (err)
+			return err;
+	} else {
+		WARN_ON(flags);
+		fd_install(fd, get_file(file));
+	}
 
 	sock = sock_from_file(file, &err);
 	if (sock) {
@@ -964,6 +975,16 @@ int file_receive(int fd, struct file *file)
 	}
 
 	return 0;
+}
+
+int file_receive_replace(int fd, unsigned int flags, struct file *file)
+{
+	return __file_receive(fd, flags, file, true);
+}
+
+int file_receive(int fd, struct file *file)
+{
+	return __file_receive(fd, 0, file, false);
 }
 
 static int ksys_dup3(unsigned int oldfd, unsigned int newfd, int flags)
