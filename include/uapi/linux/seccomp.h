@@ -113,6 +113,27 @@ struct seccomp_notif_resp {
 	__u32 flags;
 };
 
+/* valid flags for seccomp_notif_addfd */
+#define SECCOMP_ADDFD_FLAG_SETFD	(1UL << 0) /* Specify remote fd */
+
+/**
+ * struct seccomp_notif_addfd
+ * @size: The size of the seccomp_notif_addfd datastructure
+ * @fd: The local fd number
+ * @id: The ID of the seccomp notification
+ * @fd_flags: Flags the remote FD should be allocated under
+ * @remote_fd: Optional remote FD number if SETFD option is set, otherwise 0.
+ * @flags: SECCOMP_ADDFD_FLAG_*
+ */
+struct seccomp_notif_addfd {
+	__u32 size;
+	__u32 fd;
+	__u64 id;
+	__u32 fd_flags;
+	__u32 remote_fd;
+	__u64 flags;
+};
+
 #define SECCOMP_IOC_MAGIC		'!'
 #define SECCOMP_IO(nr)			_IO(SECCOMP_IOC_MAGIC, nr)
 #define SECCOMP_IOR(nr, type)		_IOR(SECCOMP_IOC_MAGIC, nr, type)
@@ -124,4 +145,8 @@ struct seccomp_notif_resp {
 #define SECCOMP_IOCTL_NOTIF_SEND	SECCOMP_IOWR(1,	\
 						struct seccomp_notif_resp)
 #define SECCOMP_IOCTL_NOTIF_ID_VALID	SECCOMP_IOR(2, __u64)
+/* On success, the return value is the remote process's added fd number */
+#define SECCOMP_IOCTL_NOTIF_ADDFD	SECCOMP_IOR(3,	\
+						struct seccomp_notif_addfd)
+
 #endif /* _UAPI_LINUX_SECCOMP_H */
