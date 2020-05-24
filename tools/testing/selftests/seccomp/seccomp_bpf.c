@@ -188,6 +188,8 @@ struct seccomp_metadata {
 
 /* valid flags for seccomp_notif_addfd */
 #define SECCOMP_ADDFD_FLAG_SETFD	(1UL << 0) /* Specify remote fd */
+#define SECCOMP_ADDFD_FLAG_MOVE		(1UL << 1)
+
 
 struct seccomp_notif {
 	__u64 id;
@@ -3752,6 +3754,12 @@ TEST(user_notification_sendfd)
 	/* Verify we can set an arbitrary remote fd */
 	addfd.remote_fd = 0;
 
+	ret = ioctl(listener, SECCOMP_IOCTL_NOTIF_ADDFD, &addfd);
+	EXPECT_GE(ret, 0);
+	EXPECT_EQ(filecmp(getpid(), pid, memfd, ret), 0);
+
+	/* Move the FD */
+	addfd.flags = SECCOMP_ADDFD_FLAG_MOVE;
 	ret = ioctl(listener, SECCOMP_IOCTL_NOTIF_ADDFD, &addfd);
 	EXPECT_GE(ret, 0);
 	EXPECT_EQ(filecmp(getpid(), pid, memfd, ret), 0);
