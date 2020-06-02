@@ -293,9 +293,6 @@ void scm_detach_fds_compat(struct msghdr *kmsg, struct scm_cookie *scm)
 
 	for (i = 0, cmfptr = (int __user *) CMSG_COMPAT_DATA(cm); i < fdmax; i++, cmfptr++) {
 		int new_fd;
-		err = security_file_receive(fp[i]);
-		if (err)
-			break;
 		err = get_unused_fd_flags(MSG_CMSG_CLOEXEC & kmsg->msg_flags
 					  ? O_CLOEXEC : 0);
 		if (err < 0)
@@ -306,8 +303,11 @@ void scm_detach_fds_compat(struct msghdr *kmsg, struct scm_cookie *scm)
 			put_unused_fd(new_fd);
 			break;
 		}
-		/* Bump the usage count and install the file. */
-		fd_install(new_fd, get_file(fp[i]));
+		err = file_receive(new_fd, fp[i]);
+		if (err) {
+			put_unused_fd(new_fd);
+			break;
+		}
 	}
 
 	if (i > 0) {

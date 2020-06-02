@@ -94,4 +94,5 @@ extern void fd_install(unsigned int fd, struct file *file);
 extern void flush_delayed_fput(void);
 extern void __fput_sync(struct file *);
 
+extern int file_receive(int fd, struct file *file);
 #endif /* __LINUX_FILE_H */

@@ -18,6 +18,9 @@
 #include <linux/bitops.h>
 #include <linux/spinlock.h>
 #include <linux/rcupdate.h>
+#include <net/sock.h>
+#include <net/netprio_cgroup.h>
+#include <net/cls_cgroup.h>
 
 unsigned int sysctl_nr_open __read_mostly = 1024*1024;
 unsigned int sysctl_nr_open_min = BITS_PER_LONG;
@@ -929,6 +932,38 @@ int replace_fd(unsigned fd, struct file *file, unsigned flags)
 out_unlock:
 	spin_unlock(&files->file_lock);
 	return err;
+}
+
+/*
+ * File Receive - Receive a file from another process
+ *
+ * This function is designed to receive files from other tasks. It encapsulates
+ * logic around security and cgroups. The file descriptor provided must be a
+ * freshly allocated (unused) file descriptor.
+ *
+ * This helper does not consume a reference to the file, so the caller must put
+ * their reference.
+ *
+ * Returns 0 upon success.
+ */
+int file_receive(int fd, struct file *file)
+{
+	struct socket *sock;
+	int err;
+
+	err = security_file_receive(file);
+	if (err)
+		return err;
+
+	fd_install(fd, get_file(file));
+
+	sock = sock_from_file(file, &err);
+	if (sock) {
+		sock_update_netprioidx(&sock->sk->sk_cgrp_data);
+		sock_update_classid(&sock->sk->sk_cgrp_data);
+	}
+
+	return 0;
 }
 
 static int ksys_dup3(unsigned int oldfd, unsigned int newfd, int flags)
